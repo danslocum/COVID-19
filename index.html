@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+	
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+	
+	<style type="text/css">
+		.line {
+			fill: none;
+			stroke: lightblue;
+			stroke-width: 1.5;
+		}
+		  
+		.overlay {
+			fill: none;
+			pointer-events: all;
+		}
+
+		.dot {
+			fill: black;
+		}
+		  
+		.focus circle {
+			fill: none;
+			stroke: steelblue;
+		}
+		div.tooltip {	
+			position: absolute;			
+			text-align: center;			
+			width: 60px;					
+			height: 28px;					
+			padding: 2px;				
+			font: 12px sans-serif;		
+			background: lightsteelblue;	
+			border: 0px;		
+			border-radius: 8px;			
+			pointer-events: none;			
+		}
+	</style>
+</head>
+
+<body>
+	<div class="col-12 text-center" style="margin-top:10px;" id="filterState">
+		<label for='stateSelect'>Select State:</label>
+		<select id='stateSelect' onchange=update()></select>
+	</div>
+	<hr>
+	<div id="visual"></div>
+    <script type="text/javascript">
+		var parseTime = d3.timeParse("%Y-%m-%d");
+		var states = [];
+		var stateOptions = "";
+		var dataset, xScale, yScale, line, xAxis, yAxis;
+		var margin = {top: 50, right: 50, bottom: 50, left: 50};
+		var width = window.innerWidth - margin.left - margin.right;
+		var height = window.innerHeight - 250 - margin.top - margin.bottom;
+		var svg = d3.select("#visual")
+				.append("svg")
+					.attr("class", "mx-auto")
+					.attr("width", width + margin.left + margin.right)
+					.attr("height", height + margin.top + margin.bottom)
+					.append("g")
+						.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+							
+			
+        d3.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv", function(d) {
+				states.push(d.state);
+                return {
+                    cases: +d.cases,
+					deaths: +d.deaths,
+					fips: +d.fips,
+					date: parseTime(d.date),
+					state: d.state
+                }
+            })
+            .then(function(data) {
+				createSelectOptions();
+				dataset = data.sort(function(x, y){
+				   return d3.ascending(x.date, y.date);
+				})	
+				
+				xScale = d3.scaleLinear().range([0, width]);
+				yScale = d3.scaleLog().range([height, 0]);
+
+				xAxis = d3.axisBottom(xScale)
+				yAxis = d3.axisLeft(yScale).ticks(10, formatPower)
+
+				svg.append("g").attr("class", "xaxis").attr("transform", "translate(0," + height + ")");
+				svg.append("g").attr("class", "yaxis");
+
+				function formatPower(x) {
+				  const e = Math.log10(x);
+				  if (e !== Math.floor(e)) return; // Ignore non-exact power of ten.
+				  return `10${(e + "").replace(/./g, c => "⁰¹²³⁴⁵⁶⁷⁸⁹"[c] || "⁻")}`;
+				}
+				
+					
+				update();
+            })
+            .catch(function(error) {
+                console.log("error loading data")
+            });
+		
+		function createSelectOptions() {
+			states = d3.set(states).values().sort(d3.ascending);
+			for(i=0; i<=states.length; i++) {
+				if (states[i] == "Virginia") {						
+					stateOptions += "<option selected>" + states[i] + "</option>";
+				} else {
+					stateOptions += "<option>" + states[i] + "</option>";
+				}
+			}
+			document.getElementById("stateSelect").innerHTML = stateOptions;
+		}
+		
+		function organizeData(data) {
+			return d3.nest()
+				.key(function(d){ return d.state;})
+				.object(data);
+		}
+		function getVelocity(i, data){
+			if (i==0){
+				return Math.max(data[i].cases, 1);
+			}
+			return Math.max(data[i].cases - data[i-1].cases, 1);
+		}
+		function getMovingAverage(i, data){
+			vals = 0
+			count = 0
+			for (j=0; j<5; j++) {
+				if (i-j>0){
+					vals += getVelocity(i-j, data);
+					count++;
+				}
+			}
+			if (vals == 0) { return 1; }
+			return vals/count
+		}
+		function update(){
+			var state = $("#stateSelect").val();
+			
+			var data_filtered = dataset.filter(function(d){ return (d.state == state) ? true: false; });	
+			var start_threshold = false;
+			var data = data_filtered.filter(function(d){ 
+					if (d.cases < 10 && start_threshold == false) { start_threshold; return false;
+					} else if (d.cases >= 10 && start_threshold == false) { start_threshold = true; return true;
+					} else { return true; }
+				});
+
+			yScale.domain([1e0, d3.max(data, function(d){ return d.cases; })]);
+			xScale.domain([0, data.length]);
+			
+			svg.selectAll(".xaxis")
+				.transition()
+					.duration(1000)
+					.call(xAxis);
+			svg.selectAll(".yaxis")
+				.transition()
+					.duration(1000)
+					.call(yAxis);
+	
+			line = d3.line()
+				.x(function(d, i) { 
+					return xScale(i); 
+				})
+				.y(function(d, i) { 
+					return yScale(getMovingAverage(i, data)); 
+				})
+				.curve(d3.curveMonotoneX);
+					
+			path = svg.selectAll('.line').data([data]);
+			path.enter().append("path")
+				.attr("class", "line")
+				.merge(path)
+				.transition()
+					.duration(2000)
+					.attr('d', line);
+			path.exit().remove();
+
+			dots = svg.selectAll(".dot").data(data);
+			dots.enter().append("circle")
+				.attr("class", "dot")
+				.merge(dots)
+				.transition()
+					.duration(2000)
+					.attr("cx", function(d, i) { return xScale(i) })
+					.attr("cy", function(d, i) { return yScale(getVelocity(i, data)); })
+					.attr("r", 1.5);
+			dots.exit().remove();
+		}
+    </script>
+</body>
+</html>
