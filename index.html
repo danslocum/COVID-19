@@ -108,33 +108,27 @@
 <body>
 	<div class="container">
 		<div class="row">
-			<div class="col-sm-8" id="visual">
-				<svg class="mx-auto" width="100%"></svg>
-			</div>
+			<div class="col-sm-8" id="visual"><svg class="mx-auto" width="100%"></svg></div>
 			<div class="col-sm-4 text-center" style="margin-top:25px;" id="filterState">
-				<label for='stateSelect'>Select State:</label>
-                <br>
+				<label for='stateSelect'>Select State:</label><br>
 				<select id='stateSelect' onchange=update() size=32 multiple></select>
 			</div>
 		</div>	
 		<div class="row">
 			<div class="col-sm-4 ml-5" style="">
-				<input type="checkbox" name="pop" checked><label> Adjust for Per Capita </label>
-				<br>
-				<input type="checkbox" name="actual" checked><label> Show Actual New Cases </label>
-				<br>
+				<input type="checkbox" name="pop" checked><label> Adjust for Per Capita </label><br>
+				<input type="checkbox" name="actual"><label> Show Actual New Cases </label><br>
 				<input type="checkbox" name="score" checked><label> Show Rate of Change Score </label>
 			</div>
 			<div class="col-sm-4" style="">
-				<input type="radio" name="yscale" value="linear" checked><label> Linear Scale</label>
-				<br>
-				<input type="radio" name="yscale" value="log"><label> Log Scale</label><br>
+				<input type="radio" name="yscale" value="linear"><label> Linear Scale</label><br>
+				<input type="radio" name="yscale" value="log" checked><label> Log Scale</label><br>
+				<input id="movingavg" type="text" name="movingavg" style="width: 25px" checked><label> Moving Average</label><br>
 			</div>
 		</div>
 		<div class="row">
 			<div class="col-12">
-				<div id="slider"></div>
-				<button id="play" style="margin-left: 50px;">Play</button>
+				<div id="slider"></div><button id="play" style="margin-left: 50px;">Play</button>
 			</div>
 		</div>
 	</div>
@@ -144,14 +138,21 @@
 		// code from:
         // https://bl.ocks.org/officeofjane/47d2b0bfeecfcb41d2212d06d095c763
         // https://bl.ocks.org/officeofjane/47d2b0bfeecfcb41d2212d06d095c763
+		
+		// data from:
+		// hospital data https://www.ahd.com/state_statistics.html
+		// population data https://api.census.gov/data/2019/pep/population/examples.html
+		
 		var ignoreStates = [
 			"Guam",
 			"Northern Mariana Islands",
 			"Virgin Islands"
 		];
 		var perCapita = true;
-		var actualNewCases = 1;
+		var actualNewCases = 0;
 		var rateScore = 1;
+		var movingAverageDays = 7;
+		
  		var parseTime = d3.timeParse("%Y-%m-%d");
 		var formatTime = d3.timeFormat("%A, %m/%d/%Y");
 		var formatDateIntoYear = d3.timeFormat("%m/%d");
@@ -201,6 +202,7 @@
 			width = width.baseVal.value - margin.left - margin.right;
 			height = window.innerHeight - 250 - margin.top - margin.bottom;
 			document.getElementById("stateSelect").size = Math.floor((height - 25) / 18);
+			document.getElementById("movingavg").value = movingAverageDays;
 
 			slider_width = document.getElementById("slider").getElementsByTagName("svg")[0].width.baseVal.value - slider_margin.left - slider_margin.right;
 			currentValue = slider_width;
@@ -224,11 +226,12 @@
 
 			yScaleLog = d3.scaleLog().range([height, 0]);
 			yScaleLinear = d3.scaleLinear().range([height, 0]);
-			yScale = yScaleLinear;
 			yAxisLog = d3.axisLeft(yScaleLog).ticks(10, formatPower);	
 			yAxisLinear = d3.axisLeft(yScaleLinear);
-			yAxis = yAxisLinear;
-			scale = "linear";
+
+			yScale = yScaleLog;
+			yAxis = yAxisLog;
+			scale = "log";
 			
 			d3.csv("/data/State_Population.csv", function(d) { pop_data[d.state] = +d.pop; });
 			d3.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv", function(d) {
@@ -237,6 +240,7 @@
 						return {
 							cases: +d.cases,
 							deaths: +d.deaths,
+							pop: pop_data[d.state],
 							fips: +d.fips,
 							date: parseTime(d.date),
 							state: d.state
@@ -265,6 +269,7 @@
 				setDotTransition();
 			});
 			$("input[name='pop']").change(function(){
+			// change to where this adjusts the "cases" and "deaths" in the dataset by population (x100,000) if per capita is true, else multiply by population (/100,000)
 				if (perCapita) { perCapita = false; }
 				else { perCapita = true; }
 				update();
@@ -278,6 +283,18 @@
 				if (rateScore) { rateScore = 0; }
 				else { rateScore = 1; }
 				update(0);
+			});
+			$("input[name='movingavg']").change(function(){
+				new_moving_average = $(this).val();
+				if (new_moving_average <= 0) {
+					new_moving_average = 1;
+					document.getElementById("movingavg").value = new_moving_average;
+				} else if (new_moving_average > 20) {
+					new_moving_average = 20;
+					document.getElementById("movingavg").value = new_moving_average;
+				}
+				movingAverageDays = new_moving_average;
+				update();
 			});
 
 		});
@@ -311,7 +328,7 @@
 					.style("opacity", 0)
 					.attr("cx", function(d, i) { return xScale(i) })
 					.attr("cy", function(d, i) { return yScale(Math.max(min, getMovingAverage(i, state_val))); })
-					.style('fill', function(d,i) { return getAccelerationColor(getAcceleration(i, getMovingAverage, state_val)); })
+					.style('fill', function(d,i) { return getAccelerationColor(getAcceleration(i, getMovingAverage, state_val), state_val); })
 					.attr('r', 3)
 					.transition()
 						.duration(transition_speed+1000)
@@ -446,21 +463,24 @@
 
 			paths = svg.selectAll('.lines').each(function(d, i){
 				if (organize_data[i] != undefined) {
-					d3.select(this).select(".line").attr("id", "line-" + organize_data[i]['key']);
-					x = d3.select(this).select(".label")
+					d3.select(this).select(".line")
+							.datum(organize_data[i])
+							.attr("id", function(j) { return "line-" + j.key.replace(" ","_"); });
+					d3.select(this).select(".label")
 							.datum(function() {
 									return {
 										value: organize_data[i]['values'].length - 1,
 										state: organize_data[i]['key']
 									}
 								})
+							.attr("id", function(j) { return "label-" + j.state.replace(" ","_"); })
 							.attr("transform", function(j) {
 									x = getMovingAverage(j.value, j.state);
 									y = yScale(Math.max(min, getMovingAverage(j.value, j.state)));
 									return "translate(" + (xScale(j.value) + 10)
 									+ "," + (yScale(Math.max(min, getMovingAverage(j.value, j.state))) + 5 )+ ")";
 								})
-							x.text(function(j) { return j.state; });
+							.text(function(j) { return j.state; });
 				}
 			});
 		}
@@ -487,20 +507,20 @@
 						.attr("class", "lines");
 			path.append("path")
 					.attr("class", "line ")
-					.attr("id", function(d) { return "line-" + d.key; })
+					.attr("id", function(d) { return "line-" + d.key.replace(" ","_"); })
 					.on("mouseover", function(d) {
 						d3.select(this).attr("class", "line line-hover");
-						d3.select("text#label-" + d['key'] + ".label").attr("class", "label label-hover");
+						d3.select("text#label-" + d['key'].replace(" ","_") + ".label").attr("class", "label label-hover");
 
 					})
 					.on("mouseout", function(d) {
 						d3.select(this).attr("class", "line");
-						d3.select("text#label-" + d['key'] + ".label").attr("class", "label");
+						d3.select("text#label-" + d['key'].replace(" ","_") + ".label").attr("class", "label");
 
 					});
 			path.append("text")
 				.attr("class", "label")
-				.attr("id", function(d) { return "label-" + d.key; })
+				.attr("id", function(d) { return "label-" + d.key.replace(" ","_"); })
 				.datum(function(d) {
 						return {
 							value: d.values.length - 1,
@@ -544,8 +564,8 @@
 			setDotTransition(transition_speed);
 		}
 		function mouseover(d, i) {
-			d3.select("path#line-" + d.state + ".line").attr("class", "line line-hover");
-			d3.select("text#label-" + d.state + ".label").attr("class", "label label-hover");
+			d3.select("path#line-" + d.state.replace(" ","_") + ".line").attr("class", "line line-hover");
+			d3.select("text#label-" + d.state.replace(" ","_") + ".label").attr("class", "label label-hover");
 
 			tooltip.transition()		
 					.duration(200)		
@@ -561,8 +581,8 @@
 				.style("top", (d3.event.pageY - 28) + "px");
 		}
 		function mouseout(d) {
-			d3.select("path#line-" + d.state + ".line").attr("class", "line");
-			d3.select("text#label-" + d.state + ".label").attr("class", "label");
+			d3.select("path#line-" + d.state.replace(" ","_") + ".line").attr("class", "line");
+			d3.select("text#label-" + d.state.replace(" ","_") + ".label").attr("class", "label");
 
 			tooltip.transition()		
 				.duration(500)		
@@ -614,16 +634,24 @@
 			else if (i > 0) { num = trend_func(i, object) - trend_func(i-1, object); }
 			return num;
 		}
-		function getAccelerationColor(num) {
-			if (num <= 0) { return "green"; }
-			else if (num <= 20) { return 'orange'; }
-			else if (num <= 50) { return 'lightcoral'; }
-			else if (num > 50) { return 'red'; }
+		function getAccelerationColor(num, object) {
+			if (perCapita) {
+				if (num <= 0 / pop_data[object]) { return "green"; }
+				else if (num <= 20 / pop_data[object]) { return 'orange'; }
+				else if (num <= 50 / pop_data[object]) { return 'lightcoral'; }
+				else if (num > 50 / pop_data[object]) { return 'red'; }			
+			} else {
+				if (num <= 0) { return "green"; }
+				else if (num <= 20) { return 'orange'; }
+				else if (num <= 50) { return 'lightcoral'; }
+				else if (num > 50) { return 'red'; }			
+			}
+
 		}
 		function getMovingAverage(i, object){
 			vals = 0
 			count = 0
-			for (j=0; j<5; j++) {
+			for (j=0; j<movingAverageDays; j++) {
 				if (i-j>0){
 					vals += getVelocity(i-j, object);
 					count++;
