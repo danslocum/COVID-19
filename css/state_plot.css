@@ -1,0 +1,37 @@
+.line {
+    fill: none;
+    stroke: black;
+    stroke-width: 1.5;
+    opacity: 1;
+}
+.line-hover {
+    stroke: red;
+    stroke-width: 2;
+    opacity: 1.5;
+}
+.label {
+    fill: black;
+    stroke: none;
+}
+.label-hover {
+    stroke: red;
+}
+.dot {
+    fill: black;
+    opacity: .5;
+}
+dot2 {
+    opacity: 1;
+}
+div.tooltip {
+    position: absolute;
+    text-align: left;
+    width: 200px;
+    height: auto;
+    padding: 2px;
+    font: 12px sans-serif;
+    background: lightsteelblue;
+    border: 0px;
+    border-radius: 8px;
+    pointer-events: none;
+}

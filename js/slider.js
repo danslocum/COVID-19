@@ -48,7 +48,7 @@ function createSlider(dataset) {
         );
 
     slider.insert("g", ".track-overlay")
-        .attr("class", "ticks")
+        .attr("class", "slider-ticks")
         .attr("transform", "translate(0," + 18 + ")")
         .selectAll("text")
         .data(timeScale.ticks(10))
@@ -59,12 +59,12 @@ function createSlider(dataset) {
             .text(function(d) { return formatDateIntoYear(d); });
 
     handle = slider.insert("circle", ".track-overlay")
-        .attr("class", "handle")
+        .attr("class", "slider-handle")
         .attr('cx', currentValue)
         .attr("r", 9);
 
     label = slider.append("text")
-        .attr("class", "label")
+        .attr("class", "slider-label")
         .attr("text-anchor", "middle")
         .text(formatDate(startDate))
         .attr("transform", "translate(0," + (-25) + ")")
