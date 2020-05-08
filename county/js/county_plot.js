@@ -24,7 +24,7 @@ function initializePlot(data_full) {
     document.getElementById("movingavg").value = movingAverageDays;
 
     width = document.getElementById("visual").getElementsByTagName("svg")[0].width.baseVal.value - margin.left - margin.right;
-    height = window.innerHeight - 250 - margin.top - margin.bottom;
+    height = 600 - margin.top - margin.bottom;
 
     svg = d3.select("#visual svg")
             .attr("class", "mx-auto")
@@ -33,10 +33,23 @@ function initializePlot(data_full) {
                 .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
     svg.append("g").attr("class", "xaxis").attr("transform", "translate(0," + height + ")");
     svg.append("g").attr("class", "yaxis");
-
+    svg.append("text")       
+            .attr('id', 'xAxis_label')
+            .attr("transform", "translate(" + (width/2) + " ," + (height + margin.top - 10) + ")")
+            .style("text-anchor", "middle")
+            .text("New Cases per 100,000 people");
+    svg.append("text")
+            .attr('id', 'yAxis_label')
+            .attr("transform", "rotate(-90)")
+            .attr("y", 0 - margin.left)
+            .attr("x",0 - (height / 2))
+            .attr("dy", "1em")
+            .style("text-anchor", "middle")
+            .text("New Cases per 100,000 people");   
     initializeScale();
     createSelectOptions(dataset);
     setLogScale();
+	setXAxis();
 }
 
 function initializeScale() {
@@ -51,7 +64,7 @@ function initializeScale() {
     yAxis_linear = d3.axisLeft(yScale_linear);
 
     function formatPower(x) {
-        const e = Math.log10(x);
+        var e = Math.log10(x);
         if (e !== Math.floor(e)) return; // Ignore non-exact power of ten.
         return `10${(e + "").replace(/./g, c => "⁰¹²³⁴⁵⁶⁷⁸⁹"[c] || "⁻")}`;
     }
@@ -59,15 +72,16 @@ function initializeScale() {
 
 function createPlot(transition_speed=1000) {
     var state = $("#stateSelect").val();
+    var county = $("#countySelect").val();
     var outbreak_cases_start = 20;
 
-    var data_filtered = dataset.filter(function(d){ return (state.includes(d.state)) ? true: false; });
+    var data_filtered = dataset.filter(function(d){ return (state.includes(d.state) && county.includes(d.county)) ? true: false; });
     var data_filtered = data_filtered.filter(function(d){ return (d.date <= timeScale.invert(currentValue)) ? true: false; });
     var start_threshold = false;
     data = data_filtered.filter(function(d){
             if (perCapita) {
-                if (d.cases < outbreak_cases_start/pop_data[d.state]*100000 && start_threshold == false) { start_threshold; return false;
-                } else if (d.cases >= outbreak_cases_start/pop_data[d.state]*100000  && start_threshold == false) { start_threshold = true; return true;
+                if (d.cases < outbreak_cases_start/pop_data[d.county.toLowerCase()]['pop']*100000 && start_threshold == false) { start_threshold; return false;
+                } else if (d.cases >= outbreak_cases_start/pop_data[d.county.toLowerCase()]['pop']*100000  && start_threshold == false) { start_threshold = true; return true;
                 } else { return true; }
             } else {
                 if (d.cases < outbreak_cases_start && start_threshold == false) { start_threshold; return false;
@@ -110,10 +124,66 @@ function createPlot(transition_speed=1000) {
 
     function organizeData(data, type="entries") {
         if (type == "object") {
-            return d3.nest().key(function(d){ return d.state;}).object(data);
+            return d3.nest().key(function(d){ return d.county;}).object(data);
         }
-        return d3.nest().key(function(d){ return d.state;}).entries(data);
+        return d3.nest().key(function(d){ return d.county;}).entries(data);
     }
+}
+
+function setScale(transition_speed) {
+    if (scale == "linear") {
+       min_y = 0;
+	   min_y = 0;
+    } else if (scale == "log") {
+        /*
+		min_array = []
+        for (var state_val in data_objects) {
+            if (perCapita) {
+                min_array.push(1 / pop_data[state_val] * 100000);
+            } else {
+                min_array.push(1);
+            }
+        }
+        min_y = d3.min(min_array);
+        min_x = d3.min(min_array);
+		*/
+		min_y = 0.01;
+		min_x = 0.01;
+	}
+
+	// set x axis
+	if ($("#xAxisSelect").val() == "Days Since Outbreak") { min_x = 0; }
+    max_x_value = [];
+    for (state_val in data_objects) {
+		max_val = d3.max(data_objects[state_val], function(d, i){ return getXAxisData(i, d.county); });
+        max_x_value.push(max_val);
+    }
+    console.log([min_x, d3.max(max_x_value)+1]);
+    xScale.domain([min_x, d3.max(max_x_value)+1]);
+	
+    svg.selectAll(".xaxis")
+        .transition()
+            .duration(transition_speed)
+            .call(xAxis);
+	
+	// set y axis
+    max_y_value = [];
+    for (state_val in data_objects) {
+        max_val = d3.max(data_objects[state_val], function(d, i){ return getVelocity(i, d.county); });
+        max_y_value.push(max_val);
+    }
+    yScale.domain([min_y, d3.max(max_y_value)]);
+
+    svg.selectAll(".yaxis")
+        .transition()
+            .duration(transition_speed)
+            .call(yAxis);
+			
+	// set line scale
+    line = d3.line()
+        .x(function(d, i) { return xScale(getXAxisData(i, d.county)); })
+        .y(function(d, i) { return yScale(Math.max(min_y, getMovingAverage(i, d.county))); })
+        .curve(d3.curveMonotoneX);
 }
 
 function setPath() {
@@ -121,52 +191,69 @@ function setPath() {
         if (organize_data[i] != undefined) {
             d3.select(this).select(".line")
                     .datum(organize_data[i])
-                    .attr("id", function(j) { return "line-" + j.key.replace(" ","_"); });
+                    .attr("id", function(j) { return "line-" + j.key.replace(" ","_").replace(",","_"); });
             d3.select(this).select(".label")
                     .datum(function() {
                             return {
                                 value: organize_data[i]['values'].length - 1,
-                                state: organize_data[i]['key']
+                                county: organize_data[i]['key']
                             }
                         })
-                    .attr("id", function(j) { return "label-" + j.state.replace(" ","_"); })
+                    .attr("id", function(j) { return "label-" + j.county.replace(" ","_").replace(",","_"); })
                     .attr("transform", function(j) {
-                            x = getMovingAverage(j.value, j.state);
-                            y = yScale(Math.max(min_y, getMovingAverage(j.value, j.state)));
-                            return "translate(" + (xScale(j.value) + 10)
-                            + "," + (yScale(Math.max(min_y, getMovingAverage(j.value, j.state))) + 5 )+ ")";
+                            return "translate(" + (xScale(getXAxisData(j.value, j.county)) + 10)
+                            + "," + (yScale(Math.max(min_y, getMovingAverage(j.value, j.county))) + 5 )+ ")";
                         })
-                    .text(function(j) { return j.state; });
+                    .text(function(j) { if (organize_data.length <= 5) { return j.county; } });
         }
     });
     paths = svg.selectAll('.lines').data(organize_data);
     path = paths.enter().append("g").attr("class", "lines");
     path.append("path")
             .attr("class", "line ")
-            .attr("id", function(d) { return "line-" + d.key.replace(" ","_"); })
+            .attr("id", function(d) { return "line-" + d.key.replace(" ","_").replace(",","_"); })
             .on("mouseover", function(d) {
                 d3.select(this).attr("class", "line line-hover");
-                d3.select("text#label-" + d['key'].replace(" ","_") + ".label").attr("class", "label label-hover");
+                d3.select("text#label-" + d['key'].replace(" ","_").replace(",","_") + ".label").attr("class", "label label-hover");
+                d3.select(this.parentNode).raise();
+                tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                tooltip
+                    .html("<b>" + d.key + "</b>")
+                    .style("left", (d3.event.pageX) + "px")
+                    .style("top", (d3.event.pageY - 28) + "px");
             })
             .on("mouseout", function(d) {
                 d3.select(this).attr("class", "line");
-                d3.select("text#label-" + d['key'].replace(" ","_") + ".label").attr("class", "label");
+                d3.select("text#label-" + d['key'].replace(" ","_").replace(",","_") + ".label").attr("class", "label");
+                tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
             });
     path.append("text")
         .attr("class", "label")
-        .attr("id", function(d) { return "label-" + d.key.replace(" ","_"); })
+        .attr("id", function(d) { return "label-" + d.key.replace(" ","_").replace(",","_"); })
         .datum(function(d) {
                 return {
                     value: d.values.length - 1,
-                    state: d.key
+                    county: d.key
                 }
             })
         .attr("transform", function(d, i) {
-                return "translate(" + (xScale(d.value) + 10)
-                + "," + (yScale(Math.max(min_y, getMovingAverage(d.value, d.state))) + 5 )+ ")";
+                return "translate(" + (xScale(getXAxisData(d.value, d.county)) + 10)
+                + "," + (yScale(Math.max(min_y, getMovingAverage(d.value, d.county))) + 5 )+ ")";
             })
         .attr("x", 5)
-        .text(function(d) { return d.state; });
+        .text(function(d) { if (organize_data.length <= 5) { return d.county; } })
+		.on("mouseover", function(d) {
+			d3.select("path#line-"+d['county'].replace(" ","_").replace(",","_")+".line").attr("class", "line line-hover");
+			d3.select("text#label-" + d['county'].replace(" ","_").replace(",","_") + ".label").attr("class", "label label-hover");
+		})
+		.on("mouseout", function(d) {
+			d3.select("path#line-"+d['county'].replace(" ","_").replace(",","_")+".line").attr("class", "line");
+			d3.select("text#label-" + d['county'].replace(" ","_").replace(",","_") + ".label").attr("class", "label");
+		});
     paths.exit().remove();
 }
 
@@ -181,9 +268,10 @@ function setDotTransition(transition_speed) {
     if (transition_speed == 0) { transition_speed += -1000; }
     svg.selectAll(".dots").each(function(d, i) {
         d3.select(this).selectAll('.dot')
-            .attr("cx", function(d, i) { return xScale(i); })
-            .attr("cy", function(d, i) { return yScale(getVelocity(i, d.state)); })
+            .attr("cx", function(d, i) { return xScale(getXAxisData(i, d.county)); })
+            .attr("cy", function(d, i) { return yScale(getVelocity(i, d.county)); })
             .attr('r', 1.25)
+            .style("pointer-events", function() { return (actualNewCases == 1) ? "all" : "none"; })
             .style("opacity", 0)
             .transition()
                 .duration(transition_speed+1000)
@@ -192,10 +280,11 @@ function setDotTransition(transition_speed) {
     svg.selectAll(".dots2").each(function(d, i) {
         d3.select(this).selectAll('.dot2')
             .style("opacity", 0)
-            .attr("cx", function(d, i) { return xScale(i) })
-            .attr("cy", function(d, i) { return yScale(Math.max(min_y, getMovingAverage(i, d.state))); })
-            .style('fill', function(d,i) { return getAccelerationColor(getAcceleration(i, getMovingAverage, d.state), d.state); })
+            .attr("cx", function(d, i) { return xScale(getXAxisData(i, d.county)) })
+            .attr("cy", function(d, i) { return yScale(Math.max(min_y, getMovingAverage(i, d.county))); })
+            .style('fill', function(d,i) { return getAccelerationColor(getAcceleration(i, getMovingAverage, d.county), d.county); })
             .attr('r', 3)
+            .style("pointer-events", function() { return (rateScore == 1) ? "all" : "none"; })
             .transition()
                 .duration(transition_speed+1000)
                 .style("opacity", rateScore);
@@ -203,13 +292,14 @@ function setDotTransition(transition_speed) {
 }
 
 function getVelocity(i, object) {
-    state_data = data_objects[object];
+    county_data = data_objects[object];
     if (scale == "log") {
-        if (i==0) { return Math.max(data[i].cases, min_y); }
-        return Math.max(state_data[i].cases - state_data[i-1].cases, min_y);
+        // if (i==0) { return Math.max(data[i].cases, min_y); }
+        if (i==0) { return min_y; }
+        return Math.max(county_data[i].cases - county_data[i-1].cases, min_y);
     } else if (scale == "linear") {
-        if (i==0) { return state_data[i].cases; }
-        return state_data[i].cases - state_data[i-1].cases;
+        if (i==0) { return county_data[i].cases; }
+        return county_data[i].cases - county_data[i-1].cases;
     }
 }
 
@@ -234,10 +324,10 @@ function getAcceleration(i, trend_func, object) {
 
 function getAccelerationColor(num, object) {
     if (perCapita) {
-        if (num <= 0 / pop_data[object]*100000) { return "green"; }
-        else if (num <= 20 / pop_data[object]*100000) { return 'orange'; }
-        else if (num <= 50 / pop_data[object]*100000) { return 'lightcoral'; }
-        else if (num > 50 / pop_data[object]*100000) { return 'red'; }
+        if (num <= 0 / pop_data[object.toLowerCase()]['pop']*100000) { return "green"; }
+        else if (num <= 20 / pop_data[object.toLowerCase()]['pop']*100000) { return 'orange'; }
+        else if (num <= 50 / pop_data[object.toLowerCase()]['pop']*100000) { return 'lightcoral'; }
+        else if (num > 50 / pop_data[object.toLowerCase()]['pop']*100000) { return 'red'; }
     } else {
         if (num <= 0) { return "green"; }
         else if (num <= 20) { return 'orange'; }
@@ -247,15 +337,15 @@ function getAccelerationColor(num, object) {
 }
 
 function mouseover(d, i) {
-    d3.select("path#line-" + d.state.replace(" ","_") + ".line").attr("class", "line line-hover");
-    d3.select("text#label-" + d.state.replace(" ","_") + ".label").attr("class", "label label-hover");
+    d3.select("path#line-" + d.county.replace(" ","_").replace(",","_") + ".line").attr("class", "line line-hover");
+    d3.select("text#label-" + d.county.replace(" ","_").replace(",","_") + ".label").attr("class", "label label-hover");
 
     tooltip.transition()
             .duration(200)
             .style("opacity", .9);
     tooltip
-        .html("<b>Avg New Cases:</b> " + getMovingAverage(i, d.state)
-                + "<br/><b>Actual New Cases:</b> " + getVelocity(i, d.state)
+        .html("<b>Avg New Cases:</b> " + getMovingAverage(i, d.county)
+                + "<br/><b>Actual New Cases:</b> " + getVelocity(i, d.county)
                 + "<br/><b>Total Cases:</b> " + d.cases
                 + "<br/><b>Deaths:</b> " + d.deaths
                 + "<br/><b>Date:</b> " + formatTime(d.date)
@@ -265,61 +355,11 @@ function mouseover(d, i) {
 }
 
 function mouseout(d) {
-    d3.select("path#line-" + d.state.replace(" ","_") + ".line").attr("class", "line");
-    d3.select("text#label-" + d.state.replace(" ","_") + ".label").attr("class", "label");
+    d3.select("path#line-" + d.county.replace(" ","_").replace(",","_") + ".line").attr("class", "line");
+    d3.select("text#label-" + d.county.replace(" ","_").replace(",","_") + ".label").attr("class", "label");
 
     tooltip.transition()
         .duration(500)
         .style("opacity", 0);
 }
 
-
-
-
-
-
-
-function setScale(transition_speed) {
-    if (scale == "linear") {
-       min_y = 0;
-    } else if (scale == "log") {
-        min_array = []
-        for (var state_val in data_objects) {
-            if (perCapita) {
-                min_array.push(1 / pop_data[state_val] * 100000);
-            } else {
-                min_array.push(1);
-            }
-        }
-        min_y = d3.min(min_array);
-        min_x = d3.min(min_array);
-    }
-
-    max_length = []
-    for (state_val in data_objects) {
-        max_length.push(data_objects[state_val].length);
-    }
-    xScale.domain([0, d3.max(max_length)]);
-
-    max_array = []
-    for (state_val in data_objects) {
-        max_val = d3.max(data_objects[state_val], function(d, i){ return getVelocity(i, d.state); });
-        max_array.push(max_val);
-    }
-    yScale.domain([min_y, d3.max(max_array)]);
-
-    line = d3.line()
-        .x(function(d, i) { return xScale(i); })
-        .y(function(d, i) { return yScale(Math.max(min_y, getMovingAverage(i, d.state))); })
-        .curve(d3.curveMonotoneX);
-
-    svg.selectAll(".xaxis")
-        .transition()
-            .duration(transition_speed)
-            .call(xAxis);
-    svg.selectAll(".yaxis")
-        .transition()
-            .duration(transition_speed)
-            .call(yAxis);
-
-}

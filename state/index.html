@@ -5,7 +5,7 @@
 	<link rel="stylesheet" href="/css/menu.css">
 	<link rel="stylesheet" href="/css/select_options.css">
 	<link rel="stylesheet" href="/css/slider.css">
-	<link rel="stylesheet" href="/css/state_plot.css">
+	<link rel="stylesheet" href="/css/plot.css">
 
     <script src="https://d3js.org/d3.v5.min.js"></script>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
@@ -25,15 +25,18 @@
 		</div>
 		<hr>
 		<div class="row">
-			<div class="col-sm-4 ml-5" style="">
-				<input type="checkbox" name="pop" checked><label> Adjust for Per Capita </label><br>
-				<input type="checkbox" name="actual"><label> Show Actual New Cases </label><br>
-				<input type="checkbox" name="score" checked><label> Show Rate of Change Score </label>
+			<div class="col-sm-3 ml-5" style="">
+				<label> Adjust for Per Capita </label><input type="checkbox" name="pop" checked><br>
+				<label> Show Actual New Cases </label><input type="checkbox" name="actual"><br>
+				<label> Show Rate of Change Score </label><input type="checkbox" name="score" checked>
+			</div>
+			<div class="col-sm-3" style="">
+				<label> Linear Scale</label><input type="radio" name="yscale" value="linear"><br>
+				<label> Log Scale</label><input type="radio" name="yscale" value="log" checked><br>
+				<label> Moving Average</label><input id="movingavg" type="text" name="movingavg" style="width: 25px" checked><br>
 			</div>
 			<div class="col-sm-4" style="">
-				<input type="radio" name="yscale" value="linear"><label> Linear Scale</label><br>
-				<input type="radio" name="yscale" value="log" checked><label> Log Scale</label><br>
-				<input id="movingavg" type="text" name="movingavg" style="width: 25px" checked><label> Moving Average</label><br>
+				<label> X Axis</label><select id='xAxisSelect' name="axis" onchange=setAxis()></select><br>
 			</div>
 		</div>
 		<div class="row">
@@ -43,10 +46,10 @@
 		</div>
 	</div>
 	
-	<script src="/js/slider.js"></script>	
-	<script src="/js/select_options.js"></script>	
-	<script src="/js/state_plot.js"></script>
-	<script src="/js/menu.js"></script>	
+	<script src="js/slider.js"></script>	
+	<script src="js/select_options.js"></script>	
+	<script src="js/state_plot.js"></script>
+	<script src="js/menu.js"></script>	
 	<script type="text/javascript">
 			// code from:
 			// 		slider bar		https://bl.ocks.org/officeofjane/47d2b0bfeecfcb41d2212d06d095c763

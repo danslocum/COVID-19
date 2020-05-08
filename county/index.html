@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<head>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+	<link rel="stylesheet" href="/css/menu.css">
+	<link rel="stylesheet" href="/css/select_options.css">
+	<link rel="stylesheet" href="/css/slider.css">
+	<link rel="stylesheet" href="/css/plot.css">
+
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>	
+
+</head>
+
+<body>
+	<div class="container">
+		<div class="row">
+			<div class="col-sm-8" id="visual"><svg class="mx-auto" width="100%"></svg></div>
+			<div class="col-sm-2 text-center" style="margin-top:25px;" id="filterState">
+				<label for='stateSelect'>Select State:</label><br>
+				<select id='stateSelect' onchange=updateCountySelect() size=32 multiple></select>
+			</div>			
+            <div class="col-sm-2 text-center" style="margin-top:25px;" id="filterCounty">
+				<label for='countySelect'>Select County:</label><br>
+				<select id='countySelect' onchange=createPlot() size=32 multiple></select>
+			</div>
+		</div>
+		<hr>
+		<div class="row">
+			<div class="col-sm-3 ml-5" style="">
+				<label> Adjust for Per Capita </label><input type="checkbox" name="pop" checked><br>
+				<label> Show Actual New Cases </label><input type="checkbox" name="actual"><br>
+				<label> Show Rate of Change Score </label><input type="checkbox" name="score" checked>
+			</div>
+			<div class="col-sm-3" style="">
+				<label> Linear Scale</label><input type="radio" name="yscale" value="linear"><br>
+				<label> Log Scale</label><input type="radio" name="yscale" value="log" checked><br>
+				<label> Moving Average</label><input id="movingavg" type="text" name="movingavg" style="width: 25px" checked><br>
+			</div>
+			<div class="col-sm-4" style="">
+				<label> X Axis</label><select id='xAxisSelect' name="axis" onchange=setAxis()></select><br>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-12">
+				<div id="slider"></div><button id="play" style="margin-left: 50px;">Play</button>
+			</div>
+		</div>
+	</div>
+	
+	<script src="js/slider.js"></script>	
+	<script src="js/select_options.js"></script>	
+	<script src="js/county_plot.js"></script>
+	<script src="js/menu.js"></script>	
+	<script type="text/javascript">
+			// code from:
+			// 		slider bar		https://bl.ocks.org/officeofjane/47d2b0bfeecfcb41d2212d06d095c763
+			
+			// data from:
+			// 		hospital data 	https://www.ahd.com/state_statistics.html
+			// 					https://github.com/xmunoz/sodapy/blob/master/examples/basic_queries.ipynb
+			// 		population data 	https://api.census.gov/data/2019/pep/population/examples.html
+			//		COVID data		https://github.com/CSSEGISandData/COVID-19
+			
+			var ignoreStates = [
+				"Guam",
+				"Northern Mariana Islands",
+				"Virgin Islands",
+                "Puerto Rico",
+			];
+
+			var parseTime = d3.timeParse("%Y-%m-%d");
+			var pop_data = {};
+
+			$(function() {				
+				d3.csv("/data/Population_County.csv", function(d) { 
+					pop_data[d.county.toLowerCase() + ',' + d.state.toLowerCase()] = {"pop": +d.pop, "density": +d.density}; 
+				});
+				d3.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv", function(d) {
+						if (ignoreStates.includes(d.state) == false && d.county != "Unknown" && pop_data[d.county.toLowerCase() + ',' + d.state.toLowerCase()] != undefined) {
+							return {
+								cases: +d.cases/pop_data[d.county.toLowerCase() + ',' + d.state.toLowerCase()]['pop']*100000,
+								deaths: +d.deaths/pop_data[d.county.toLowerCase() + ',' + d.state.toLowerCase()]['pop']*100000,
+                                density: pop_data[d.county.toLowerCase() + ',' + d.state.toLowerCase()]['density'],
+								pop: pop_data[d.county.toLowerCase() + ',' + d.state.toLowerCase()]['pop'],
+								fips: +d.fips,
+								date: parseTime(d.date),
+								state: d.state,
+                                county: d.county + ',' + d.state,
+							}
+						}
+					})
+					.then(function(data_full) {
+						initializePlot(data_full);
+						createPlot();
+					})
+					.catch(function(error) { 
+						console.log("error loading data");
+					});
+			});
+		</script>
+
+</body>
+</html>
