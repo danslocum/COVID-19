@@ -75,7 +75,7 @@
 			var pop_data = {};
 
 			$(function() {				
-				d3.csv("/data/Population_County.csv", function(d) { 
+				d3.csv("../data/Population_County.csv", function(d) {
 					pop_data[d.county.toLowerCase() + ',' + d.state.toLowerCase()] = {"pop": +d.pop, "density": +d.density}; 
 				});
 				d3.csv("https://cdn.jsdelivr.net/gh/nytimes/covid-19-data/us-counties.csv", function(d) {
