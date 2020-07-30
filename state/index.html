@@ -73,7 +73,8 @@
 				d3.csv("/data/Population_State.csv", function(d) { 
 					pop_data[d.state] = +d.pop; 
 				});
-				d3.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv", function(d) {
+				d3.csv("https://cdn.jsdelivr.net/gh/nytimes/covid-19-data/us-states.csv", function(d) {
+//				d3.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv", function(d) {-->
 						if (ignoreStates.includes(d.state) == false) {
 							return {
 								cases: +d.cases/pop_data[d.state]*100000,

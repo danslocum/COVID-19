@@ -78,7 +78,8 @@
 				d3.csv("/data/Population_County.csv", function(d) { 
 					pop_data[d.county.toLowerCase() + ',' + d.state.toLowerCase()] = {"pop": +d.pop, "density": +d.density}; 
 				});
-				d3.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv", function(d) {
+				d3.csv("https://cdn.jsdelivr.net/gh/nytimes/covid-19-data/us-counties.csv", function(d) {
+				// d3.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv", function(d) {
 						if (ignoreStates.includes(d.state) == false && d.county != "Unknown" && pop_data[d.county.toLowerCase() + ',' + d.state.toLowerCase()] != undefined) {
 							return {
 								cases: +d.cases/pop_data[d.county.toLowerCase() + ',' + d.state.toLowerCase()]['pop']*100000,

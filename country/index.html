@@ -74,7 +74,8 @@
 					pop_data[d.state] = +d.pop; 
 				});
                 */
-				d3.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv", function(d) {
+				d3.csv("https://cdn.jsdelivr.net/gh/CSSEGISandData/COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv", function(d) {
+				// d3.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv", function(d) {
 						if (ignoreStates.includes(d['Country/Region']) == false) {
                             dates = [];
                             ignoreColumns = ["Province/State", 'Country/Region', 'Lat', 'Long'];
